@@ -1,0 +1,30 @@
+{
+  "name": "close-helpdesk-ticket",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "keywords": [
+    "nodejs",
+    "mysql",
+    "postgres"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "luxon": "^3.4.4",
+    "mysql2": "^3.6.5",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.3",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.35.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
