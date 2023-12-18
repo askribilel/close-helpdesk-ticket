@@ -1,13 +1,4 @@
-/**
- *
- * @param {*} host: database host
- * @param {*} database
- * @param {*} username
- * @param {*} password
- * @param {*} port
- * @param {*} dialect
- * @returns
- */
+const { Sequelize } = require("sequelize");
 function getSequelizeInstance(dbCredentials) {
   return new Sequelize({
     host: dbCredentials.host,

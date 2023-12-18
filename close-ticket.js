@@ -1,5 +1,6 @@
 const { DateTime } = require("luxon");
-const { Sequelize, QueryTypes } = require("sequelize");
+const { QueryTypes } = require("sequelize");
+const fs = require('fs');
 const {
   getSequelizeInstance,
   radiusDatabaseCredentials,
@@ -7,16 +8,14 @@ const {
   helpdeskDatabaseCredentials,
 } = require("./helpers/connect-to-db");
 
-// connect to radius database
 const sequelizeRadius = getSequelizeInstance(radiusDatabaseCredentials);
-// connect to historic radius database
-const sequelizeHistoricRadius = getSequelizeInstance(
-  historicRadiusDatabaseCredentials
-);
-// connect to helpdesk database
+
+// const sequelizeHistoricRadius = getSequelizeInstance(
+//   historicRadiusDatabaseCredentials
+// );
+
 const sequelizeHelpdesk = getSequelizeInstance(helpdeskDatabaseCredentials);
 
-// get list ticket from helpdesk
 async function getDataFromHelpdesk() {
   subjects =
     "'Pas de synchro', 'Pas de synchro suite transfert', 'Pas de synchro suite migration VDSL', 'Pas de synchro_Vol de cable', 'Pas de synchro_cable sous terrain', 'Pas de synchro MES', 'Pas de synchro MES_Vol de cable', 'Pas de synchro MES_cable sous terrain', 'Pas de synchro MES_Cable 5/1 non installé', 'Pas d''accès', 'Pas d''accès MES', 'Pas d''accès suite migration VDSL', 'Pas d''accès suite transfert', 'Pas d''accès_MAC 0005', 'Port inversé', 'Port inversé MES', 'Port inversé suite transfert', 'Port inversé suite migration VDSL'";
@@ -32,100 +31,75 @@ async function getDataFromHelpdesk() {
   );
 }
 
-// get data from radacct for the current month
 async function getDataFromRadacct(phones) {
-  return await sequelizeRadius.query(
-    `SELECT radacctid, acctstatustype, acctstarttime, acctstoptime, tel_adsl 
+  const HALF_HOUR = (1 / 2) * 3600 * 1000;
+  let radacctData = await sequelizeRadius.query(
+    `SELECT radacctid, acctstatustype, acctstarttime, acctstoptime, acctsessiontime, tel_adsl 
      FROM radacct 
-     WHERE tel_adsl IN (${phones})
+     WHERE tel_adsl IN ${phones} AND acctstoptime IS NOT NULL AND acctsessiontime >= ${HALF_HOUR}
      ORDER BY acctstarttime DESC;`,
     { type: QueryTypes.SELECT }
   );
+  return radacctData;
 }
 
-async function getHistoRadius(telAdsl) {
-  let [rows] = await sequelizeHistoricRadius.query("SHOW tables");
-  let getDataFromHistoRadius = [];
-  for (const result of rows) {
-    let table = "`" + result["Tables_in_histo_radius"] + "`";
-    let data = await sequelizeHistoricRadius.query(
-      `select radacctid, acctstatustype, acctstarttime, acctstoptime from ${table}
-                     where tel_adsl = '${telAdsl}' 
-                     ORDER BY acctstarttime DESC;`,
-      { type: Sequelize.QueryTypes.SELECT }
-    );
-  }
-  return getDataFromHistoRadius;
+function getPhonesFromHelpdesk(ticketList) {
+  let phones = `(`;
+  ticketList.map((ticket) => {
+    if (ticket.x_phone) {
+      phones += "'" + ticket.x_phone.trim() + "'" + ",";
+    }
+  });
+  phones = phones.slice(0, -1) + ")";
+  return phones;
+}
+
+function convertJSDate(date, zone) {
+  return DateTime.fromJSDate(date, { zone: zone });
+}
+
+function filterTicketToClose(ticketList, dataFromRadius) {
+  let ticketToClose = [];
+  ticketList.forEach((ticket) => {
+    let index = 0;
+    let isConnected = false;
+    let creationHelpdeskDate = convertJSDate(ticket.create_date, "utc+1");
+    fs.appendFileSync('close.log','phone: ' + ticket.x_phone + ' create_date: ' + creationHelpdeskDate.toFormat("yyyy/MM/dd: hh:mm:ss") +"\r\n")
+    // console.log(creationHelpdeskDate.toFormat("yyyy/MM/dd: hh:mm:ss"));
+    while (index < dataFromRadius.length && isConnected == false) {
+      let radacctStartDate = convertJSDate(
+        dataFromRadius[index].acctstarttime,
+        "utc"
+      );
+      // console.log(index, radacctStartDate.toFormat("yyyy/MM/dd hh:mm:ss"));
+      fs.appendFileSync('close.log', 'phone: ' + dataFromRadius[index].tel_adsl + ' start_date: ' + radacctStartDate.toFormat("yyyy/MM/dd hh:mm:ss") + "\r\n");
+      if (
+        creationHelpdeskDate <= radacctStartDate &&
+        ticket.x_phone == dataFromRadius[index].tel_adsl
+      ) {
+        isConnected = true;
+        ticketToClose.push(ticket);
+      } else {
+        index++;
+      }
+    }
+    fs.appendFileSync('close.log', '\r\n------------------------\r\n');
+  });
+
+  return ticketToClose;
 }
 
 async function autoticketclose() {
   try {
-    getDataFromHelpdesk();
+    let ticketList = await getDataFromHelpdesk();
+    let phones = getPhonesFromHelpdesk(ticketList);
+    let dataFromRadius = await getDataFromRadacct(phones);
 
-    // we need to filter phones from helpdesk
-    getDataFromRadacct();
-
-    getHistoRadius();
-
-    async function ticketWillClose(telAdsl, startDate, endDate) {
-      const HALF_HOUR = (1 / 2) * 3600 * 1000;
-
-      const helpdeskData = await getDataFromHelpdesk();
-      const radacctData = await getDataFromRadacct(telAdsl, startDate, endDate);
-      const histoRadiusData = await getHistoRadius(telAdsl, startDate, endDate);
-
-      let creationHelpDate = helpdeskData.create_date;
-      let radacctStartDate = radacctData.acctstarttime;
-      let histoStartDate = histoRadiusData.acctstarttime;
-
-      let condition1 = creationHelpDate <= radacctStartDate;
-      let condition2 = creationHelpDate <= histoStartDate;
-
-      if (HALF_HOUR && condition1 && condition2) {
-        const updateQuery = `UPDATE public.helpdesk_ticket 
-          SET ticket.closed_date = CURRENT_TIMESTAMP, ticket.stage_id = 9 
-           WHERE id = ${ticket.id} AND x_phone = ${telAdsl}`;
-        await sequelizehelp.query(updateQuery, {
-          type: Sequelize.QueryTypes.UPDATE,
-        });
-        console.log(`Ticket ${ticket.id} updated.`, updateQuery);
-      }
-    }
-
-    ticketWillClose("71986149", "acctstarttime", "acctstoptime");
+    let ticketToClose = filterTicketToClose(ticketList, dataFromRadius);
+    console.log(ticketToClose);
   } catch (error) {
-    console.error("Error running query:", error);
+    console.error(error);
   }
 }
 
-autoticketclose();
-
-// const sequelizeRadius = new Sequelize({
-//   host: process.env.radiusHost,
-//   database: process.env.radiusDatabase,
-//   username: process.env.radiusUserName,
-//   password: process.env.radiusPassword,
-//   port: 3306,
-//   dialect: "mysql",
-//   logging: console.log,
-// });
-
-// const sequelizeHistoricRadius = new Sequelize({
-//   host: process.env.radiusHost,
-//   database: process.env.radiusHistoricDatabase,
-//   username: process.env.radiusUserName,
-//   password: process.env.radiusPassword,
-//   port: 3306,
-//   dialect: "mysql",
-//   logging: console.log,
-// });
-
-// const sequelizehelp = new Sequelize({
-//   host: process.env.helpdeskHost,
-//   database: process.env.helpdeskDatabase,
-//   username: process.env.helpdeskUsername,
-//   password: process.env.helpdeskPassword,
-//   port: 5432,
-//   dialect: "postgres",
-//   logging: console.log,
-// });
+module.exports = { autoticketclose };
