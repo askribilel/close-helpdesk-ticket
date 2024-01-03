@@ -3,6 +3,9 @@ const cron = require('node-cron');
 const { autoticketclose } = require("./close-ticket");
 
 
-cron.schedule('*/2 * * * *', () => {
+cron.schedule('01 23 * * *', () => {
     autoticketclose();
-})
+});
+
+
+

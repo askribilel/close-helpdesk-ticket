@@ -1,0 +1,6 @@
+
+
+error at 2024-01-03 05:08:00
+                        SequelizeDatabaseError: syntax error at or near "05"
+                        ------------------------- 
+
