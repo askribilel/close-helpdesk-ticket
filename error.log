@@ -4,3 +4,19 @@ error at 2024-01-03 05:08:00
                         SequelizeDatabaseError: syntax error at or near "05"
                         ------------------------- 
 
+error at 2024-01-05 02:42:36
+    Error: Mail command failed: 452 4.3.1 Insufficient system storage
+    ------------------------- 
+
+error at 2024-01-05 02:57:04
+    Error: Mail command failed: 452 4.3.1 Insufficient system storage
+    ------------------------- 
+
+error at 2024-01-05 03:09:26
+    Error: Mail command failed: 452 4.3.1 Insufficient system storage
+    ------------------------- 
+
+error at 2024-01-05 03:31:55
+    Error: Mail command failed: 452 4.3.1 Insufficient system storage
+    ------------------------- 
+

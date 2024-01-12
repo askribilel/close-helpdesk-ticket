@@ -1,5 +1,6 @@
 const { DateTime } = require("luxon");
 const { QueryTypes } = require("sequelize");
+const { sendEmail } = require("./mailer/send-mail");
 const excel = require("exceljs");
 const fs = require("fs");
 
@@ -18,6 +19,37 @@ const sequelizeRadius = getSequelizeInstance(radiusDatabaseCredentials);
 
 const sequelizeHelpdesk = getSequelizeInstance(helpdeskDatabaseCredentials);
 
+function padTo2Digits(num) {
+  return num.toString().padStart(2, "0");
+}
+
+function formatDate(date) {
+  return (
+    [
+      date.getFullYear(),
+      padTo2Digits(date.getMonth() + 1),
+      padTo2Digits(date.getDate()),
+    ].join("-") +
+    " " +
+    [
+      padTo2Digits(date.getHours()),
+      padTo2Digits(date.getMinutes()),
+      padTo2Digits(date.getSeconds()),
+    ].join(":")
+  );
+}
+
+async function getHelpdeskUser() {
+  let helpDeskResult = await sequelizeHelpdesk.query(
+    `SELECT id, login FROM res_users WHERE login = 'support@bee.net.tn'`,
+    {
+      type: QueryTypes.SELECT,
+      logging: false,
+    }
+  );
+  return helpDeskResult[0];
+}
+
 // get ticket list from helpdesk
 async function getDataFromHelpdesk() {
   console.log("--------- get data from helpdesk -----------");
@@ -29,7 +61,7 @@ async function getDataFromHelpdesk() {
                                               FROM public.helpdesk_ticket as ticket
                                               LEFT JOIN public.helpdesk_ticket_category as ticket_category 
                                               ON ticket.category_id = ticket_category.id
-                                              WHERE ticket_category.name IN (${subjects}) AND stage_id IN (8,10)
+                                              WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10)
                                               ORDER BY ticket.create_date desc;`,
     { type: QueryTypes.SELECT, logging: false }
   );
@@ -177,87 +209,115 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
   return { ticketToClose, clientsNotConnected, ticketWithoutTelAdsl };
 }
 
+async function createExcelFile(ticketToClose) {
+  let fileExists = fs.existsSync("ticket-to-close.xlsx");
+  if (fileExists) {
+    fs.unlinkSync("ticket-to-close.xlsx");
+  }
+  let workbook = new excel.Workbook();
+  let worksheet = workbook.addWorksheet("ticket-to-close");
+  // let worksheet2 = workbook.addWorksheet("clients-not-connected");
+  // let worksheet3 = workbook.addWorksheet("ticket-without-tel-adsl");
+
+  worksheet.columns = [
+    { header: "id", key: "id", width: 20 },
+    { header: "create_date", key: "create_date", width: 20 },
+    { header: "x_phone", key: "x_phone", width: 20 },
+    {
+      header: "ticket_category_name",
+      key: "ticket_category_name",
+      width: 20,
+    },
+    { header: "connection_date", key: "connection_date", width: 30 },
+    { header: "check", key: "check", width: 30 },
+  ];
+
+  // worksheet2.columns = [
+  //   { header: "id", key: "id", width: 20 },
+  //   { header: "create_date", key: "create_date", width: 20 },
+  //   { header: "x_phone", key: "x_phone", width: 20 },
+  //   {
+  //     header: "ticket_category_name",
+  //     key: "ticket_category_name",
+  //     width: 20,
+  //   },
+  // ];
+
+  // worksheet3.columns = [
+  //   { header: "id", key: "id", width: 20 },
+  //   { header: "create_date", key: "create_date", width: 20 },
+  //   { header: "x_phone", key: "x_phone", width: 20 },
+  //   {
+  //     header: "ticket_category_name",
+  //     key: "ticket_category_name",
+  //     width: 20,
+  //   },
+  // ];
+
+  worksheet.addRows(ticketToClose);
+  // worksheet2.addRows(clientsNotConnected);
+  // worksheet3.addRows(ticketWithoutTelAdsl);
+  await workbook.xlsx.writeFile("ticket-to-close.xlsx");
+}
+
+async function updateTicketStatus(ticketIds, helpDeskUser) {
+  let userId = helpDeskUser.id;
+  let now = new Date();
+  now.setHours(now.getHours() -1);
+  let formattedDate = formatDate(now);
+  let updateHelpdeskTicketQuery = `UPDATE public.helpdesk_ticket
+                                   SET closed_date = '${formattedDate}', last_stage_update = '${formattedDate}', stage_id = 9, write_uid = ${userId}
+                                   WHERE id IN ${ticketIds}`;
+
+  await sequelizeHelpdesk.query(updateHelpdeskTicketQuery, {
+    type: QueryTypes.UPDATE,
+  });
+}
+
+function getTicketIds(ticketList) {
+  let ticketIds = [];
+  ticketIds = ticketList.map((ticket) => ticket.id);
+  let formattedIds = "(";
+  ticketIds.map((id) => {
+    formattedIds += id + ",";
+  });
+  formattedIds = formattedIds.slice(0, -1) + ")";
+  return formattedIds;
+  // return ticketIds;
+}
+
 async function autoticketclose() {
   console.log("-------------------- START CRON -----------------------");
   console.time("startCron");
+  let to = ["majdi.bouakroucha@bee.net.tn", "alaeddine.hellali@bee.net.tn"];
+  let cc = ["seif.mejri@bee.net.tn", "fatouma.hamdouni@bee.net.tn", "bilel.askri@bee.net.tn"];
   try {
+    let helpDeskUser = await getHelpdeskUser();
     let ticketList = await getDataFromHelpdesk();
     let phones = getPhonesFromHelpdesk(ticketList);
     let { lastAuths, lastStops } = await getDataFromRadacct(phones);
     let { ticketToClose, clientsNotConnected, ticketWithoutTelAdsl } =
       await filterTicketToClose(lastAuths, lastStops, ticketList);
-    // let workbook = new excel.Workbook();
-    // let worksheet = workbook.addWorksheet("ticket-to-close");
-    // let worksheet2 = workbook.addWorksheet("clients-not-connected");
-    // let worksheet3 = workbook.addWorksheet("ticket-without-tel-adsl");
-
-    // worksheet.columns = [
-    //   { header: "id", key: "id", width: 20 },
-    //   { header: "create_date", key: "create_date", width: 20 },
-    //   { header: "x_phone", key: "x_phone", width: 20 },
-    //   {
-    //     header: "ticket_category_name",
-    //     key: "ticket_category_name",
-    //     width: 20,
-    //   },
-    //   { header: "connection_date", key: "connection_date", width: 30 },
-    //   { header: "check", key: "check", width: 30 },
-    // ];
-
-    // worksheet2.columns = [
-    //   { header: "id", key: "id", width: 20 },
-    //   { header: "create_date", key: "create_date", width: 20 },
-    //   { header: "x_phone", key: "x_phone", width: 20 },
-    //   {
-    //     header: "ticket_category_name",
-    //     key: "ticket_category_name",
-    //     width: 20,
-    //   },
-    // ];
-
-    // worksheet3.columns = [
-    //   { header: "id", key: "id", width: 20 },
-    //   { header: "create_date", key: "create_date", width: 20 },
-    //   { header: "x_phone", key: "x_phone", width: 20 },
-    //   {
-    //     header: "ticket_category_name",
-    //     key: "ticket_category_name",
-    //     width: 20,
-    //   },
-    // ];
-
-    // worksheet.addRows(ticketToClose);
-    // worksheet2.addRows(clientsNotConnected);
-    // worksheet3.addRows(ticketWithoutTelAdsl);
-    // await workbook.xlsx.writeFile("ticket-to-close.xlsx");
-
-    await updateTicketStatus(ticketToClose);
-    console.log("ticket closed successfully!");
+    console.log(ticketToClose);
+    if (ticketToClose.length > 0) {
+      let ticketIds = getTicketIds(ticketToClose);
+      await createExcelFile(ticketToClose);
+      await sendEmail(to, cc);
+      await updateTicketStatus(ticketIds, helpDeskUser);
+      console.log("ticket closed successfully!");
+    } else {
+      console.log("does not exist tickets to close");
+    }
   } catch (error) {
     let now = DateTime.now().toFormat("yyyy-MM-dd hh:mm:ss");
     let errorMessage = `error at ${now}
-                        ${error}
-                        ------------------------- \n\n`;
+    ${error}
+    ------------------------- \n\n`;
     fs.appendFileSync("error.log", errorMessage);
     console.error(error);
   }
   console.timeEnd("startCron");
   console.log("-------------------- END CRON -----------------------");
-}
-
-async function updateTicketStatus(ticketsToClose) {
-  // closed_date ==> new Date();
-  // stage_id ==> 9
-
-  let now = DateTime.now().toFormat("yyyy-MM-dd hh:mm:ss");
-  let phones = getPhonesFromHelpdesk(ticketsToClose);
-  let updateHelpdeskTicketQuery = `UPDATE public.helpdesk_ticket
-                                   SET closed_date = '${now}', last_stage_update = '${now}', stage_id = 9
-                                   WHERE x_phone IN ${phones}`;
-
-  await sequelizeHelpdesk.query(updateHelpdeskTicketQuery, {
-    type: QueryTypes.UPDATE,
-  });
 }
 
 module.exports = { autoticketclose };
