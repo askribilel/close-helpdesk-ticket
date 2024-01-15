@@ -55,6 +55,7 @@ async function getDataFromHelpdesk() {
   console.log("--------- get data from helpdesk -----------");
   subjects =
     "'Pas de synchro', 'Pas de synchro suite transfert', 'Pas de synchro suite migration VDSL', 'Pas de synchro_Vol de cable', 'Pas de synchro_cable sous terrain', 'Pas de synchro MES', 'Pas de synchro MES_Vol de cable', 'Pas de synchro MES_cable sous terrain', 'Pas de synchro MES_Cable 5/1 non installé', 'Pas d''accès', 'Pas d''accès MES', 'Pas d''accès suite migration VDSL', 'Pas d''accès suite transfert', 'Pas d''accès_MAC 0005', 'Port inversé', 'Port inversé MES', 'Port inversé suite transfert', 'Port inversé suite migration VDSL'";
+  // let phones = "('72338212', '72295307', '72243132', '72304207')";
   return await sequelizeHelpdesk.query(
     `SELECT ticket.id, ticket.create_date, x_phone,  
                                               ticket_category.name as ticket_category_name
@@ -176,6 +177,7 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
       lastAuthInstanceStartFormatted = formatDateHuman(lastAuthInstanceStart);
     }
 
+    const HALF_HOUR_WITH_MILLISECONDS_SECONDS = 1800000;
     if (
       stopInstanceStart &&
       DateTime.fromFormat(created_date_formatted, "MM/dd/yyyy, hh:mm:ss") <=
@@ -194,7 +196,8 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
           lastAuthInstanceStartFormatted,
           "MM/dd/yyyy, hh:mm:ss"
         ) &&
-      now.diff(lastAuthInstanceStart).minutes > 29
+      now.diff(lastAuthInstanceStart).milliseconds >
+        HALF_HOUR_WITH_MILLISECONDS_SECONDS
     ) {
       ticketToClose.push({
         ...ticket,
@@ -206,18 +209,13 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
       clientsNotConnected.push(ticket);
     }
   }
-  return { ticketToClose, clientsNotConnected, ticketWithoutTelAdsl };
+  return { ticketToClose };
 }
 
 async function createExcelFile(ticketToClose) {
-  let fileExists = fs.existsSync("ticket-to-close.xlsx");
-  if (fileExists) {
-    fs.unlinkSync("ticket-to-close.xlsx");
-  }
+  console.log(ticketToClose.length);
   let workbook = new excel.Workbook();
   let worksheet = workbook.addWorksheet("ticket-to-close");
-  // let worksheet2 = workbook.addWorksheet("clients-not-connected");
-  // let worksheet3 = workbook.addWorksheet("ticket-without-tel-adsl");
 
   worksheet.columns = [
     { header: "id", key: "id", width: 20 },
@@ -232,38 +230,14 @@ async function createExcelFile(ticketToClose) {
     { header: "check", key: "check", width: 30 },
   ];
 
-  // worksheet2.columns = [
-  //   { header: "id", key: "id", width: 20 },
-  //   { header: "create_date", key: "create_date", width: 20 },
-  //   { header: "x_phone", key: "x_phone", width: 20 },
-  //   {
-  //     header: "ticket_category_name",
-  //     key: "ticket_category_name",
-  //     width: 20,
-  //   },
-  // ];
-
-  // worksheet3.columns = [
-  //   { header: "id", key: "id", width: 20 },
-  //   { header: "create_date", key: "create_date", width: 20 },
-  //   { header: "x_phone", key: "x_phone", width: 20 },
-  //   {
-  //     header: "ticket_category_name",
-  //     key: "ticket_category_name",
-  //     width: 20,
-  //   },
-  // ];
-
   worksheet.addRows(ticketToClose);
-  // worksheet2.addRows(clientsNotConnected);
-  // worksheet3.addRows(ticketWithoutTelAdsl);
   await workbook.xlsx.writeFile("ticket-to-close.xlsx");
 }
 
 async function updateTicketStatus(ticketIds, helpDeskUser) {
   let userId = helpDeskUser.id;
   let now = new Date();
-  now.setHours(now.getHours() -1);
+  now.setHours(now.getHours() - 1);
   let formattedDate = formatDate(now);
   let updateHelpdeskTicketQuery = `UPDATE public.helpdesk_ticket
                                    SET closed_date = '${formattedDate}', last_stage_update = '${formattedDate}', stage_id = 9, write_uid = ${userId}
@@ -289,19 +263,32 @@ function getTicketIds(ticketList) {
 async function autoticketclose() {
   console.log("-------------------- START CRON -----------------------");
   console.time("startCron");
+  let fileExists = fs.existsSync("ticket-to-close.xlsx");
+  if (fileExists) {
+    fs.unlinkSync("ticket-to-close.xlsx");
+    console.log("file removed");
+  }
   let to = ["majdi.bouakroucha@bee.net.tn", "alaeddine.hellali@bee.net.tn"];
-  let cc = ["seif.mejri@bee.net.tn", "fatouma.hamdouni@bee.net.tn", "bilel.askri@bee.net.tn"];
+  let cc = [
+    "seif.mejri@bee.net.tn",
+    "fatouma.hamdouni@bee.net.tn",
+    "bilel.askri@bee.net.tn",
+  ];
   try {
     let helpDeskUser = await getHelpdeskUser();
     let ticketList = await getDataFromHelpdesk();
     let phones = getPhonesFromHelpdesk(ticketList);
     let { lastAuths, lastStops } = await getDataFromRadacct(phones);
-    let { ticketToClose, clientsNotConnected, ticketWithoutTelAdsl } =
-      await filterTicketToClose(lastAuths, lastStops, ticketList);
+    let { ticketToClose } = await filterTicketToClose(
+      lastAuths,
+      lastStops,
+      ticketList
+    );
     console.log(ticketToClose);
     if (ticketToClose.length > 0) {
       let ticketIds = getTicketIds(ticketToClose);
       await createExcelFile(ticketToClose);
+      console.log(ticketIds);
       await sendEmail(to, cc);
       await updateTicketStatus(ticketIds, helpDeskUser);
       console.log("ticket closed successfully!");
