@@ -7,16 +7,10 @@ const fs = require("fs");
 const {
   getSequelizeInstance,
   radiusDatabaseCredentials,
-  historicRadiusDatabaseCredentials,
   helpdeskDatabaseCredentials,
 } = require("./helpers/connect-to-db");
 
 const sequelizeRadius = getSequelizeInstance(radiusDatabaseCredentials);
-
-// const sequelizeHistoricRadius = getSequelizeInstance(
-//   historicRadiusDatabaseCredentials
-// );
-
 const sequelizeHelpdesk = getSequelizeInstance(helpdeskDatabaseCredentials);
 
 function padTo2Digits(num) {
@@ -55,7 +49,6 @@ async function getDataFromHelpdesk() {
   console.log("--------- get data from helpdesk -----------");
   subjects =
     "'Pas de synchro', 'Pas de synchro suite transfert', 'Pas de synchro suite migration VDSL', 'Pas de synchro_Vol de cable', 'Pas de synchro_cable sous terrain', 'Pas de synchro MES', 'Pas de synchro MES_Vol de cable', 'Pas de synchro MES_cable sous terrain', 'Pas de synchro MES_Cable 5/1 non installé', 'Pas d''accès', 'Pas d''accès MES', 'Pas d''accès suite migration VDSL', 'Pas d''accès suite transfert', 'Pas d''accès_MAC 0005', 'Port inversé', 'Port inversé MES', 'Port inversé suite transfert', 'Port inversé suite migration VDSL'";
-  // let phones = "('72338212', '72295307', '72243132', '72304207')";
   return await sequelizeHelpdesk.query(
     `SELECT ticket.id, ticket.create_date, x_phone,  
                                               ticket_category.name as ticket_category_name
@@ -88,10 +81,12 @@ async function getDataFromRadacct(phones) {
 
   let lastAuthPromise = sequelizeRadius.query(lastAuthQuery, {
     type: QueryTypes.SELECT,
+    logging: false
   });
 
   let lastStopPromise = sequelizeRadius.query(lastStopQuery, {
     type: QueryTypes.SELECT,
+    logging: false
   });
 
   let [lastAuths, lastStops] = await Promise.all([
