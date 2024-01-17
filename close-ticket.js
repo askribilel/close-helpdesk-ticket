@@ -289,8 +289,8 @@ async function autoticketclose() {
       let ticketIds = getTicketIds(ticketToClose);
       await createExcelFile(ticketToClose);
       console.log(ticketIds);
-      await sendEmail(to, cc);
-      await updateTicketStatus(ticketIds, helpDeskUser);
+      // await sendEmail(to, cc);
+      // await updateTicketStatus(ticketIds, helpDeskUser);
       console.log("ticket closed successfully!");
     } else {
       console.log("does not exist tickets to close");

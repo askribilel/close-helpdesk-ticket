@@ -14,7 +14,6 @@ async function sendEmail(to, cc) {
     },
   };
 
-  console.log(selfSignedConfig);
 
   let transporter = nodemailer.createTransport(selfSignedConfig);
 
@@ -29,7 +28,7 @@ async function sendEmail(to, cc) {
   };
 
   const info = await transporter.sendMail(mailOptions);
-  console.log("Message sent: %s", info.rejected);
+  console.log("Message sent: %s", info.accepted);
 }
 
 module.exports = { sendEmail };
