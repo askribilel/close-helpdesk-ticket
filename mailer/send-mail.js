@@ -1,8 +1,6 @@
 const nodemailer = require("nodemailer");
 
 async function sendEmail(to, cc) {
-  console.log(to);
-  console.log(cc);
   let selfSignedConfig = {
     host: "mail.beemail.tn",
     port: 25,

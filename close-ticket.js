@@ -38,9 +38,11 @@ async function getHelpdeskUser() {
     `SELECT id, login FROM res_users WHERE login = 'support@bee.net.tn'`,
     {
       type: QueryTypes.SELECT,
-      logging: false,
+      logging: console.log,
+      benchmark: true
     }
   );
+  console.log(helpDeskResult);
   return helpDeskResult[0];
 }
 
@@ -57,7 +59,7 @@ async function getDataFromHelpdesk() {
                                               ON ticket.category_id = ticket_category.id
                                               WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10)
                                               ORDER BY ticket.create_date desc;`,
-    { type: QueryTypes.SELECT, logging: false }
+    { type: QueryTypes.SELECT, logging: false,  }
   );
 }
 
@@ -284,8 +286,8 @@ async function autoticketclose() {
       let ticketIds = getTicketIds(ticketToClose);
       await createExcelFile(ticketToClose);
       console.log(ticketIds);
-      // await sendEmail(to, cc);
-      // await updateTicketStatus(ticketIds, helpDeskUser);
+      await sendEmail(to, cc);
+      await updateTicketStatus(ticketIds, helpDeskUser);
       console.log("ticket closed successfully!");
     } else {
       console.log("does not exist tickets to close");
