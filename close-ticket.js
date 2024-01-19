@@ -59,7 +59,7 @@ async function getDataFromHelpdesk() {
                                               ON ticket.category_id = ticket_category.id
                                               WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10)
                                               ORDER BY ticket.create_date desc;`,
-    { type: QueryTypes.SELECT, logging: false,  }
+    { type: QueryTypes.SELECT, logging: false, }
   );
 }
 
@@ -177,8 +177,8 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
     const HALF_HOUR_WITH_MILLISECONDS_SECONDS = 1800000;
     if (
       stopInstanceStart &&
-      DateTime.fromFormat(created_date_formatted, "MM/dd/yyyy, hh:mm:ss") <=
-        DateTime.fromFormat(stopInstanceStartFormatted, "MM/dd/yyyy, hh:mm:ss")
+      DateTime.fromFormat(created_date_formatted, "dd/MM/yyyy hh:mm:ss") <=
+      DateTime.fromFormat(stopInstanceStartFormatted, "dd/MM/yyyy hh:mm:ss")
     ) {
       ticketToClose.push({
         ...ticket,
@@ -188,13 +188,13 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
       });
     } else if (
       lastAuthInstance?.acctstatustype == "Start" &&
-      DateTime.fromFormat(created_date_formatted, "MM/dd/yyyy, hh:mm:ss") <=
-        DateTime.fromFormat(
-          lastAuthInstanceStartFormatted,
-          "MM/dd/yyyy, hh:mm:ss"
-        ) &&
+      DateTime.fromFormat(created_date_formatted, "dd/MM/yyyy hh:mm:ss") <=
+      DateTime.fromFormat(
+        lastAuthInstanceStartFormatted,
+        "dd/MM/yyyy hh:mm:ss"
+      ) &&
       now.diff(lastAuthInstanceStart).milliseconds >
-        HALF_HOUR_WITH_MILLISECONDS_SECONDS
+      HALF_HOUR_WITH_MILLISECONDS_SECONDS
     ) {
       ticketToClose.push({
         ...ticket,
