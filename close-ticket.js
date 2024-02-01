@@ -57,7 +57,7 @@ async function getDataFromHelpdesk() {
                                               FROM public.helpdesk_ticket as ticket
                                               LEFT JOIN public.helpdesk_ticket_category as ticket_category 
                                               ON ticket.category_id = ticket_category.id
-                                              WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10) AND x_phone IN ('70664401', '70665051')
+                                              WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10)
                                               ORDER BY ticket.create_date desc;`,
     { type: QueryTypes.SELECT, logging: false, }
   );
