@@ -1,6 +1,7 @@
 const { DateTime } = require("luxon");
 const { QueryTypes } = require("sequelize");
 const { sendEmail } = require("./mailer/send-mail");
+const { sendSms } = require('./sms/send-sms');
 const excel = require("exceljs");
 const fs = require("fs");
 
@@ -42,7 +43,6 @@ async function getHelpdeskUser() {
       benchmark: true
     }
   );
-  console.log(helpDeskResult);
   return helpDeskResult[0];
 }
 
@@ -52,12 +52,12 @@ async function getDataFromHelpdesk() {
   subjects =
     "'Pas de synchro', 'Pas de synchro suite transfert', 'Pas de synchro suite migration VDSL', 'Pas de synchro_Vol de cable', 'Pas de synchro_cable sous terrain', 'Pas de synchro MES', 'Pas de synchro MES_Vol de cable', 'Pas de synchro MES_cable sous terrain', 'Pas de synchro MES_Cable 5/1 non installé', 'Pas d''accès', 'Pas d''accès MES', 'Pas d''accès suite migration VDSL', 'Pas d''accès suite transfert', 'Pas d''accès_MAC 0005', 'Port inversé', 'Port inversé MES', 'Port inversé suite transfert', 'Port inversé suite migration VDSL'";
   return await sequelizeHelpdesk.query(
-    `SELECT ticket.id, ticket.create_date, x_phone,  
+    `SELECT ticket.id, ticket.create_date, x_phone, x_gsm,  
                                               ticket_category.name as ticket_category_name
                                               FROM public.helpdesk_ticket as ticket
                                               LEFT JOIN public.helpdesk_ticket_category as ticket_category 
                                               ON ticket.category_id = ticket_category.id
-                                              WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10)
+                                              WHERE ticket_category.name IN (${subjects}) AND stage_id IN (3,8,10) AND x_phone IN ('70664401', '70665051')
                                               ORDER BY ticket.create_date desc;`,
     { type: QueryTypes.SELECT, logging: false, }
   );
@@ -115,16 +115,14 @@ function convertJSDate(date, zone) {
 
 // try this one for format date
 function formatDateHuman(date) {
-  return date.toLocaleString({
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    formatMatcher: "basic",
-    hourCycle: "h24",
-  });
+  let day = date.get('day').toString().length == 2 ? date.get('day').toString() : '0' + date.get('day').toString();
+  let month = date.get('month').toString().length == 2 ? date.get('month').toString() : '0' + date.get('month').toString();
+  let year = date.get('year');
+  let hour = date.get('hour').toString().length == 2 ? date.get('hour').toString() : '0' + date.get('hour').toString();
+  let minute = date.get('minute').toString().length == 2 ? date.get('minute').toString() : '0' + date.get('minute').toString();
+  let second = date.get('second').toString().length == 2 ? date.get('second').toString() : '0' + date.get('second').toString();
+  let formattedDate = `${day}/${month}/${year} ${hour}:${minute}:${second}`;
+  return formattedDate;
 }
 
 async function filterTicketToClose(lastAuths, lastStops, ticketList) {
@@ -155,8 +153,6 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
     }
     let created_date = convertJSDate(ticket.create_date, "utc+2");
     let created_date_formatted = formatDateHuman(created_date);
-    // let created_date_formatted = created_date.toFormat("dd/MM/yyyy hh:mm:ss");
-
     let stopInstance = lastStopsMap.get(x_phone);
     let lastAuthInstance = lastAuthsMap.get(x_phone);
 
@@ -209,10 +205,16 @@ async function filterTicketToClose(lastAuths, lastStops, ticketList) {
   return { ticketToClose };
 }
 
-async function createExcelFile(ticketToClose) {
-  console.log(ticketToClose.length);
+async function createExcelFile(ticketToClose, gsmList) {
   let workbook = new excel.Workbook();
+  let workbookGsm = new excel.Workbook();
+
   let worksheet = workbook.addWorksheet("ticket-to-close");
+  let worksheetSms = workbookGsm.addWorksheet("sms");
+
+  worksheetSms.columns = [
+    { header: "MSISDN", key: "x_gsm", width: 30 }
+  ];
 
   worksheet.columns = [
     { header: "id", key: "id", width: 20 },
@@ -228,6 +230,8 @@ async function createExcelFile(ticketToClose) {
   ];
 
   worksheet.addRows(ticketToClose);
+  worksheetSms.addRows(gsmList);
+  await workbookGsm.csv.writeFile("gsm.csv");
   await workbook.xlsx.writeFile("ticket-to-close.xlsx");
 }
 
@@ -257,13 +261,33 @@ function getTicketIds(ticketList) {
   // return ticketIds;
 }
 
+function getGsmListFromTickets(ticketToClose) {
+  let gsmList = [];
+  let ticketWithoutGsm = [];
+  ticketToClose.forEach(ticket => {
+    if (ticket.x_gsm) {
+      gsmList.push({ "x_gsm": `216${ticket.x_gsm}`});
+    } else {
+      ticketWithoutGsm.push(ticket);
+    }
+  });
+
+  return { gsmList, ticketWithoutGsm };
+}
+
 async function autoticketclose() {
   console.log("-------------------- START CRON -----------------------");
   console.time("startCron");
   let fileExists = fs.existsSync("ticket-to-close.xlsx");
   if (fileExists) {
     fs.unlinkSync("ticket-to-close.xlsx");
-    console.log("file removed");
+    console.log("excel file removed");
+  }
+
+  let gsmExists = fs.existsSync("gsm.csv");
+  if (gsmExists) {
+    fs.unlinkSync("gsm.csv");
+    console.log("gsm file removed");
   }
   let to = ["majdi.bouakroucha@bee.net.tn", "alaeddine.hellali@bee.net.tn"];
   let cc = [
@@ -274,6 +298,10 @@ async function autoticketclose() {
   try {
     let helpDeskUser = await getHelpdeskUser();
     let ticketList = await getDataFromHelpdesk();
+    if (ticketList.length == 0) {
+      console.log('No tickets to close');
+      return;
+    }
     let phones = getPhonesFromHelpdesk(ticketList);
     let { lastAuths, lastStops } = await getDataFromRadacct(phones);
     let { ticketToClose } = await filterTicketToClose(
@@ -281,13 +309,15 @@ async function autoticketclose() {
       lastStops,
       ticketList
     );
-    console.log(ticketToClose);
+    console.log(ticketToClose.length);
     if (ticketToClose.length > 0) {
       let ticketIds = getTicketIds(ticketToClose);
-      await createExcelFile(ticketToClose);
-      console.log(ticketIds);
-      await sendEmail(to, cc);
+      let { gsmList, ticketWithoutGsm } = getGsmListFromTickets(ticketToClose)
+      await createExcelFile(ticketToClose, gsmList);
+      console.log(gsmList.length);
+      // await sendEmail(to, cc);
       await updateTicketStatus(ticketIds, helpDeskUser);
+      sendSms('gsm.csv');
       console.log("ticket closed successfully!");
     } else {
       console.log("does not exist tickets to close");
@@ -303,5 +333,6 @@ async function autoticketclose() {
   console.timeEnd("startCron");
   console.log("-------------------- END CRON -----------------------");
 }
+ 
 
 module.exports = { autoticketclose };

@@ -25,8 +25,12 @@ async function sendEmail(to, cc) {
         You will find in this excel file the list of resolved tickets`,
   };
 
-  const info = await transporter.sendMail(mailOptions);
-  console.log("Message sent: %s", info.accepted);
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Message sent: %s", info.accepted);
+  } catch (error) {
+    console.log(`sent email error: ${error}`)
+  }
 }
 
 module.exports = { sendEmail };
