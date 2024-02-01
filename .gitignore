@@ -1,7 +1,12 @@
+error.log
+gsm.csv
+sms.csv
+error.log
+
+*.log
+
+
 node_modules/
 .env
 package-lock.json
-
-error.log
-*.log
 ticket-to-close.xlsx
