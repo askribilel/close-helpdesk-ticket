@@ -317,7 +317,7 @@ async function autoticketclose() {
       console.log(gsmList.length);
       // await sendEmail(to, cc);
       await updateTicketStatus(ticketIds, helpDeskUser);
-      sendSms('gsm.csv');
+      // sendSms('gsm.csv');
       console.log("ticket closed successfully!");
     } else {
       console.log("does not exist tickets to close");
