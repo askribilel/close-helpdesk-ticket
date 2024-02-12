@@ -306,7 +306,8 @@ async function autoticketclose() {
     if (ticketToClose.length > 0) {
       let ticketIds = getTicketIds(ticketToClose);
       let { gsmList, ticketWithoutGsm } = getGsmListFromTickets(ticketToClose);
-      console.log('ticket without gsm: ', ticketWithoutGsm.toString());
+      console.log('tickets without gsm: ');
+      console.table(ticketWithoutGsm);
       await createExcelFile(ticketToClose, gsmList);
       await updateTicketStatus(ticketIds, helpDeskUser);
       console.log("ticket closed successfully!");

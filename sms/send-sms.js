@@ -1,4 +1,5 @@
 const { exec } = require('child_process');
+const fs = require("fs");
 
 function sendSms(smsFilePath) {
     let gsmExists = fs.existsSync(smsFilePath);
