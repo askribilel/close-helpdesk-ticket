@@ -28,6 +28,32 @@ error at 2024-01-15 02:02:00
     Error: fromFormat requires an input string and a format
     ------------------------- 
 
+error at 2024-01-19 11:58:49
+    Error: fromFormat requires an input string and a format
+    ------------------------- 
+
+error at 2024-01-19 12:28:04
+    Error: fromFormat requires an input string and a format
+    ------------------------- 
+
+error at 2024-01-19 02:00:11
+    Error: fromFormat requires an input string and a format
+    ------------------------- 
+
+error at 2024-01-19 02:13:51
+    Error: fromFormat requires an input string and a format
+    ------------------------- 
+
+error at 2024-01-19 02:43:27
+    Error: fromFormat requires an input string and a format
+    ------------------------- 
+
+error at 2024-01-21 11:13:03
+    Error: Mail command failed: 452 4.3.1 Insufficient system storage
+    ------------------------- 
+
+error at 2024-01-22 11:14:05
+    Error: Invalid login: 535 5.7.8 Error: authentication failed: authentication failure
 error at 2024-01-25 09:23:29
     SequelizeDatabaseError: operator does not exist: character varying = integer
     ------------------------- 
