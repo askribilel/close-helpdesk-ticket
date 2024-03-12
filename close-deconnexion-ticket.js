@@ -307,8 +307,8 @@ async function deconnexionTicketClose() {
             let ticketIds = getTicketIds(ticketToClose);
             let { gsmList } = getGsmListFromTickets(ticketToClose)
             await createExcelFile(ticketToClose, gsmList);
-            // await updateTicketStatus(ticketIds, helpDeskUser);
-            // sendSms('gsm-deconnexion.csv');
+            await updateTicketStatus(ticketIds, helpDeskUser);
+            sendSms('gsm-deconnexion.csv');
             console.log("ticket closed successfully!");
         } else {
             console.log("does not exist tickets to close");
